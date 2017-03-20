@@ -7,7 +7,7 @@ It is designed for the quick deployment of any type of ESS Physical DM. However,
 ## Goal
 * This script should be used for the ESS Physical DM setup for CentOS 7.1 1503.
 * This script should provide an easy solution to setup the DM quickly
-* This script should focus *ONLY* two options (EEE Local installation and CS-Studio installation) 
+* This script should focus *ONLY* one option (EEE installation)
 * This script should provide an additional installation of several packages
 
 
@@ -32,21 +32,18 @@ Download the CentOS 7.1 (1503) as following links :
 
 ### Open an Terminal
 
-### Download the script
+### Download and Execute the script as follows:
 
-* Short, but it has no meaning
+* Setup the EEE 1.8.2 
 ```
 $ curl -L https://git.io/vi8DA -o dm_setup.bash
-```
-* Long, but it is self-evidence
-```
-$ curl -L https://raw.githubusercontent.com/jeonghanlee/essdm_scripts/master/dm_setup.bash -o dm_setup.bash
+$ bash dm_setup.bash loc
 ```
 
-### Execute the script
-
+* Setup CSS 4.4.1.2
 ```
-$ bash dm_setup.bash 
+$ curl -L https://git.io/vMyeU -o css_setup.bash
+$ bash css_setup.bash
 ```
 
 ## Reference 
@@ -54,6 +51,8 @@ $ bash dm_setup.bash
 
 ## Installation Example
 Please see the [README.md in DMonVM](./DMonVM/README.md).
+* Note that this example is always out-of-date and only is valid for a reference example. 
 
 ## Issues
 * Mate-Desktop has the dependency issue
+* CSS will be installed via css_setup.bash indepentently. 

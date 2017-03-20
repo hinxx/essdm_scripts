@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-#  Copyright (c) 2016 Jeong Han Lee
-#  Copyright (c) 2016 European Spallation Source ERIC
+#  Copyright (c) 2016 - Present Jeong Han Lee
+#  Copyright (c) 2016 - Present European Spallation Source ERIC
 #
 #  The dm_setup.bash is free software: you can redistribute
 #  it and/or modify it under the terms of the GNU General Public License
@@ -20,7 +20,7 @@
 # Author : Jeong Han Lee
 # email  : han.lee@esss.se
 # Date   : 
-# version : 0.9.5
+# version : 0.9.8
 #
 # http://www.gnu.org/software/bash/manual/bashref.html#Bash-Builtins
 
@@ -42,16 +42,15 @@ function pushd() { builtin pushd "$@" > /dev/null; }
 function popd()  { builtin popd  "$@" > /dev/null; }
 
 
-function ini_func() { sleep 1; printf "\n>>>> You are entering in : %s\n" "${1}"; }
-function end_func() { sleep 1; printf "\n<<<< You are leaving from %s\n" "${1}"; }
+function __ini_func() { printf "\n>>>> You are entering in  : %s\n" "${1}"; }
+function __end_func() { printf "\n<<<< You are leaving from : %s\n" "${1}"; }
 
-function checkstr() {
+function __checkstr() {
     if [ -z "$1" ]; then
 	printf "%s : input variable is not defined \n" "${FUNCNAME[*]}"
 	exit 1;
     fi
 }
-
 
 function printf_tee() {
 
@@ -64,159 +63,152 @@ function printf_tee() {
 
 
 
-# Generic : Global variables for git_clone, git_selection, and others
-# 
-declare -g SC_SELECTED_GIT_SRC=""
-declare -g SC_GIT_SRC_DIR=""
-declare -g SC_GIT_SRC_NAME=""
-declare -g SC_GIT_SRC_URL=""
-
 
 # Generic : git_clone
+# 1.0.3 Tuesday, November  8 18:13:44 CET 2016
 #
 # Required Global Variable
-# - SC_GIT_SRC_DIR  : Input
 # - SC_LOGDATE      : Input
-# - SC_GIT_SRC_URL  : Input
-# - SC_GIT_SRC_NAME : Input
-# 
+
 function git_clone() {
-
-    local func_name=${FUNCNAME[*]}; ini_func ${func_name}
-
-    checkstr ${SC_LOGDATE}
-    checkstr ${SC_GIT_SRC_URL}
-    checkstr ${SC_GIT_SRC_NAME}
     
-    if [[ ! -d ${SC_GIT_SRC_DIR} ]]; then
-	echo "No git source repository in the expected location ${SC_GIT_SRC_DIR}"
+    local func_name=${FUNCNAME[*]}; __ini_func ${func_name};
+    
+    local git_src_dir=$1;
+    local git_src_url=$2;
+    local git_src_name=$3;
+    local tag_name=$4;
+    
+    __checkstr ${SC_LOGDATE};
+    
+    if [[ ! -d ${git_src_dir} ]]; then
+	printf "No git source repository in the expected location %s\n" "${git_src_dir}";
     else
-	echo "Old git source repository in the expected location ${SC_GIT_SRC_DIR}"
-	echo "The old one is renamed to ${SC_GIT_SRC_DIR}_${SC_LOGDATE}"
-	mv  ${SC_GIT_SRC_DIR} ${SC_GIT_SRC_DIR}_${SC_LOGDATE}
+	printf "Old git source repository in the expected location %s\n" "${git_src_dir}";
+	printf "The old one is renamed to %s_%s\n" "${git_src_dir}" "${SC_LOGDATE}";
+	mv  ${git_src_dir} ${git_src_dir}_${SC_LOGDATE}
     fi
     
-    # Alwasy fresh cloning ..... in order to workaround any local 
+    # Always fresh cloning ..... in order to workaround any local 
     # modification in the repository, which was cloned before. 
     #
-    git clone ${SC_GIT_SRC_URL}/${SC_GIT_SRC_NAME}
+    # we need the recursive option in order to build a web based viewer for Archappl
+    if [ -z "$tag_name" ]; then
+	git clone --recursive "${git_src_url}/${git_src_name}" "${git_src_dir}";
+    else
+	git clone --recursive -b "${tag_name}" --single-branch --depth 1 "${git_src_url}/${git_src_name}" "${git_src_dir}";
+    fi
 
-    end_func ${func_name}
+    __end_func ${func_name};
 }
 
 
 # Generic : git_selection
 #
-# 1.1.0 : Monday, October 10 09:23:24 CEST 2016
-#
-# Require Global vairable
-# - SC_SELECTED_GIT_SRC  : Output
+# 1.0.4a : Wednesday, January 11 10:02:28 CET 2017
 #
 function git_selection() {
 
-    local func_name=${FUNCNAME[*]}; ini_func ${func_name};
+    local func_name=${FUNCNAME[*]}; __ini_func ${func_name};
 
-    local git_ckoutcmd="";
-    local checked_git_src="";
+    local git_ckoutcmd=""
+    local checked_git_src=""
 
-    declare -i index=0;
-    declare -i master_index=0;
-    declare -i list_size=0;
-    declare -i selected_one=0;
-    declare -a git_src_list=();
+    
+    declare -i index=0
+    declare -i master_index=0
+    declare -i list_size=0
+    declare -i selected_one=0
+    declare -a git_src_list=()
+
     
     local n_tags=${1};
 
     # no set n_tags, set default 10
+    
     if [[ ${n_tags} -eq 0 ]]; then
-	n_tags=10;
+	n_tags=20;
     fi
 
-    git_src_list+=("master");
+    git_src_list+=("master")
 
-    # git_tags=$(git describe --tags `git rev-list --tags --max-count=${n_tags}`);
-    # git_exitstatus=$?
-    # if [ $git_exitstatus = 0 ]; then
-    # 	#
-    # 	# (${}) and ($(command))  are important to separate output as an indiviaul arrar
-    # 	#
-    # 	git_src_list+=(${git_tags});
-    # else
-    # 	# In case, No tags can describe, use git tag instead of git describe
-    # 	#
-    # 	# fatal: No tags can describe '7fce903a82d47dec92012664648cacebdacd88e1'.
-    # 	# Try --always, or create some tags.
-    # doesn't work for CentOS7
-    #    git_src_list+=($(git tag -l --sort=-refname  | head -n${n_tags}))
-    # fi
-
-    git_src_list+=($(git tag -l | sort -r | head -n${n_tags}));
-
+    git_src_list+=($(git tag -l | xargs -I@ git log --format=format:"%ai @%n" -1 @ | sort -r | head -n${n_tags} | awk '{print $4}'))
     
     for tag in "${git_src_list[@]}"
     do
-	printf "%2s: git src %34s\n" "$index" "$tag";
-	let "index = $index + 1";
+	printf "%2s: git src %34s\n" "$index" "$tag"
+	let "index = $index + 1"
     done
-    
-    echo -n "Select master or one of tags which can be built, followed by [ENTER]: "
-    
-    # don't wait for 3 characters 
-    # read -e -n 2 line
+
+    # type [ENTER], 0 is selected as default.
+    echo -n "Select master (0, enter) or one of tags which can be built, followed by [ENTER]: "
+
     read -e line
-    
+   
     # convert a string to an integer?
     # do I need this? 
     # selected_one=${line/.*}
 
-    # Without selection number, type [ENTER], 0 is selected as default.
-    #
-    selected_one=${line};
-    let "list_size = ${#git_src_list[@]} - 1";
+    selected_one=${line}
+    
+    let "list_size = ${#git_src_list[@]} - 1"
     
     if [[ "$selected_one" -gt "$list_size" ]]; then
-	printf "\n>>> Please select one number smaller than %s\n" "${list_size}";
-	exit 1
+	printf "\n>>> Please select one number smaller than %s\n" "${list_size}"
+	exit 1;
     fi
     if [[ "$selected_one" -lt 0 ]]; then
-	printf "\n>>> Please select one number larger than 0\n"; 
-	exit 1
+	printf "\n>>> Please select one number larger than 0\n" 
+	exit 1;
     fi
 
-    SC_SELECTED_GIT_SRC="$(tr -d ' ' <<< ${git_src_list[line]})";
+    SC_SELECTED_GIT_SRC="$(tr -d ' ' <<< ${git_src_list[line]})"
     
-    printf "\n>>> Selected %34s --- \n" "${SC_SELECTED_GIT_SRC}\n";
-
+    printf "\n>>> Selected %34s --- \n" "${SC_SELECTED_GIT_SRC}"
+ 
+    echo ""
     if [ "$selected_one" -ne "$master_index" ]; then
+	git_ckoutcmd="git checkout tags/${SC_SELECTED_GIT_SRC}"
+	$git_ckoutcmd
+	checked_git_src="$(git describe --exact-match --tags)"
+	checked_git_src="$(tr -d ' ' <<< ${checked_git_src})"
 	
-	git_ckoutcmd="git checkout tags/${SC_SELECTED_GIT_SRC}";
-	$git_ckoutcmd;
-
-	checked_git_src="$(git describe --exact-match --tags)";
-	checked_git_src="$(tr -d ' ' <<< ${checked_git_src})";
-	
-	printf "\n>>> Selected : %s --- \n>>> Checkout : %s --- \n" "${SC_SELECTED_GIT_SRC}" "${checked_git_src}";
+	printf "\n>>> Selected : %s --- \n>>> Checkout : %s --- \n" "${SC_SELECTED_GIT_SRC}" "${checked_git_src}"
 	
 	if [ "${SC_SELECTED_GIT_SRC}" != "${checked_git_src}" ]; then
-	    printf "Something is not right, please check your git reposiotry\n";
+	    echo "Something is not right, please check your git reposiotry"
 	    exit 1
 	fi
     else
-	git_ckoutcmd="git checkout ${SC_SELECTED_GIT_SRC}";
-	$git_ckoutcmd;
+	git_ckoutcmd="git checkout ${SC_SELECTED_GIT_SRC}"
+	$git_ckoutcmd
     fi
+
+    git submodule update --init --recursive
     
-    end_func ${func_name};
-    
+    __end_func ${func_name}
+ 
 }
 
+
+# /tmp/rsync-startup.log {
+#     daily
+#     rotate 7
+#     create 0664 iocuser iocuser
+#     missingok
+#     notifempty
+#     compress
+#     nodelaycompress
+#     size 1k
+#     su root
+# }
 
 
 function print_logrotate_rule() {
 
     local logfile=${1};
     local user=${2};
-    printf "%s {\nmissingok\nnotifempty\nsize 100k\nyearly\ncreate 0666 %s %s\n}" "${logfile}" "${user}" "${user}";
+    printf "%s {\ndaily\nrotate 7\ncreate 0664 %s %s\nmissingok\nnotifempty\ncompress\nnodelaycompress\nsize 1k\nsu root\n}" "${logfile}" "${user}" "${user}";
     
 }
 
@@ -230,8 +222,8 @@ function print_logrotate_rule() {
 
 function preparation() {
     
-    local func_name=${FUNCNAME[*]}; ini_func ${func_name};
-    checkstr ${SUDO_CMD};
+    local func_name=${FUNCNAME[*]}; __ini_func ${func_name};
+    __checkstr ${SUDO_CMD};
 
     # yum, repository
     declare -r yum_pid="/var/run/yum.pid"
@@ -247,25 +239,33 @@ function preparation() {
     local ansible_logrotate="/etc/logrotate.d/ansible";
     local ansible_logrotate_rule=$(print_logrotate_rule "${ANSIBLE_LOG}" "${SC_IOCUSER}");
     local ansilbe_log_init=$(printf "Note that ansible is not running currently,\nPlease wait for it, it will show up here soon....\nThis screen is updated every 2 seconds, to check the ansible log file in %s\n" "${ANSIBLE_LOG}");
+
+
+
+    
+    ${SUDO_CMD} systemctl stop packagekit
+    ${SUDO_CMD} systemctl disable packagekit
     
     # Somehow, yum is running due to PackageKit, so if so, kill it
     #
     if [[ -e ${yum_pid} ]]; then
 	${SUDO_CMD} kill -9 $(cat ${yum_pid})
-    fi	
-    
-    # Remove PackageKit
-    #
-    ${SUDO_CMD} yum -y remove PackageKit 
+	if [ $? -ne 0 ]; then
+	    printf "Remove the orphan yum pid\n";
+	    ${SUDO_CMD} rm -rf ${yum_pid}
+	fi
+    fi
+        
 
     # Necessary to clean up the existent CentOS repositories
-    # 
-    ${SUDO_CMD} rm -rf ${yum_repo_dir}/*  
+    #
+    ${SUDO_CMD} find ${yum_repo_dir} -mindepth 1 -maxdepth 1 -exec rm -rf '{}' \;
     ${SUDO_CMD} rm -rf ${rpmgpgkey_dir}/${rpmgpgkey_epel}
     
     # Download the ESS customized repository files and its RPM GPG KEY file
     #
-    ${SUDO_CMD} curl -o ${yum_repo_dir}/${repo_centos}     ${ess_repo_url}/CentOS-Vault-7.1.1503.repo \
+    ${SUDO_CMD} curl \
+		-o ${yum_repo_dir}/${repo_centos}     ${ess_repo_url}/CentOS-Vault-7.1.1503.repo \
 		-o ${yum_repo_dir}/${repo_epel}       ${ess_repo_url}/${repo_epel} \
 		-o ${rpmgpgkey_dir}/${rpmgpgkey_epel} ${ess_repo_url}/${rpmgpgkey_epel}
     
@@ -286,17 +286,29 @@ function preparation() {
     
     printf_tee "${ansible_logrotate_rule}" "${ansible_logrotate}";
 
-    end_func ${func_name};
+
+    # Remove PackageKit
+    #
+    ${SUDO_CMD} yum -y remove PackageKit;
+
+    #
+    # In order to access the MCH through the USB serial connection
+    # for example, /dev/ttyACM0
+    # the user should be in the dialout group. 
+    #
+    ${SUDO_CMD} usermod -a -G dialout ${SC_IOCUSER}
+    
+    __end_func ${func_name};
 }
 
 
 function is-active-ui() {
 
-    local func_name=${FUNCNAME[*]}; ini_func ${func_name};
+    local func_name=${FUNCNAME[*]}; __ini_func ${func_name};
     
     GUI_STATUS="$(systemctl is-active graphical.target)";
 
-    if [[ ${GUI_STATUS} = "active" ]]; then
+    if [[ ${GUI_STATUS} = "active" && "${DEVENV_EEE}" = "local" ]]; then
 	# If a system has the GUI, it returns "active"
 	printf "\n User Interface was detected, \nexecute the monitoring terminal for the EEE Rsync status and install the required packages for them.\n\n";
 	
@@ -319,16 +331,16 @@ function is-active-ui() {
 	${SUDO_CMD} yum -y install unzip redhat-menus xdg-utils
     fi
 
-    end_func ${func_name};
+    __end_func ${func_name};
 }
 
 function yum_gui(){
 
     local func_name=${FUNCNAME[*]}
 
-    ini_func ${func_name}
+    __ini_func ${func_name}
     
-    checkstr ${SUDO_CMD}
+    __checkstr ${SUDO_CMD}
 
 
     ${SUDO_CMD} yum -y groupinstall "Gnome Desktop"
@@ -338,35 +350,45 @@ function yum_gui(){
     ${SUDO_CMD} systemctl disable gdm.service
     ${SUDO_CMD} systemctl enable lightdm.service
     
-    end_func ${func_name}  
+    __end_func ${func_name}  
 }
 
 
 
 function yum_extra(){
     
-    local func_name=${FUNCNAME[*]}
+    local func_name=${FUNCNAME[*]}; __ini_func ${func_name};
+    __checkstr ${SUDO_CMD};
+    declare -a package_list=();
 
-    ini_func ${func_name}
+    package_list+="emacs tree screen telnet nano";
+    package_list+=" ";
+    package_list+="xterm xorg-x11-fonts-misc";
+    package_list+=" ";
+    package_list+="net-snmp net-snmp-utils"
+    package_list+=" ";
+    ## putty 
+    package_list+="cpan gtk2-devel";
+    package_list+=" ";
+    ## ipmi
+    package_list+="ipmitool OpenIPMI";
+    package_list+=" ";
     
-    checkstr ${SUDO_CMD}
-
-    ${SUDO_CMD} yum -y install emacs screen
+    ${SUDO_CMD} yum -y install ${package_list}; 
 
     # Now it is safe to run update by an user, let them do this job.
     
     ${SUDO_CMD} yum -y update
     
-    end_func ${func_name}
+    __end_func ${func_name}
 }
 
 
 function update_eeelocal_parameters() {
 
-    local func_name=${FUNCNAME[*]}; ini_func ${func_name};
-    checkstr ${SC_GIT_SRC_DIR}; checkstr ${SC_IOCUSER};
-
-    local target_dir=${SC_GIT_SRC_DIR}/roles/EEElocal
+    local func_name=${FUNCNAME[*]}; __ini_func ${func_name};  __checkstr ${SC_IOCUSER};
+    local git_src_dir=$1;
+    local target_dir=${git_src_dir}/roles/EEElocal
 
     # Replace the default user (ess) with the user who executes this script (whoami)
     printf "... Replace the default user (ess) with \"%s\" in %s\n\n" "${SC_IOCUSER}" "${target_dir}/tasks/main.yml";
@@ -374,17 +396,16 @@ function update_eeelocal_parameters() {
     # It is the bad idea to have the same "ess" in everywhere
 
     # is needed to transfer bash variable into sed
-    sed -i~ "s/name=ess/name=${SC_IOCUSER}/g"   "${target_dir}/tasks/main.yml"
+    sed -i~ "s/name=ess/name=${SC_IOCUSER}/g"     "${target_dir}/tasks/main.yml"
     sed -i  "s/a user ess/a user ${SC_IOCUSER}/g" "${target_dir}/tasks/main.yml"
     sed -i  "s/owner=ess/owner=${SC_IOCUSER}/g"   "${target_dir}/tasks/main.yml"
     
-    # Replace the default user, and add log files for rsync-epics.service and rsync-startup.service
+  
+  # Replace the default user, and add log files for rsync-epics.service and rsync-startup.service
     printf "... Replace the default user (ess) with \"%s\" in %s \n\n... Add logfiles in %s\n" \
 	   "${SC_IOCUSER}" "${target_dir}/files/rsync-{epics,startup}.service" \
 	   "/tmp/rsync-{epics,startup}.log";
 
-    
-    
     local rsync_server="rsync://owncloud01.esss.lu.se:80";
 
     # - .git directory should not be in EEE. 
@@ -469,112 +490,157 @@ User=${SC_IOCUSER}
 WantedBy=multi-user.target
 EOF
 
-    end_func ${func_name};  
+    __end_func ${func_name};  
+    
+
+}
+
+function update_css_configuration() {
+
+    local func_name=${FUNCNAME[*]}; __ini_func ${func_name};
+    local css_diirt_dir="${HOME}/configuration/diirt";
+    
+    mkdir -p ${css_diirt_dir};
+    pushd ${css_diirt_dir};
+    cp -R /opt/cs-studio/configuration/diirt/* ${css_diirt_dir};
+    popd;
+    __end_func ${func_name};  
+}
+
+declare -g  DEVENV_EEE="";
+declare -g  ANSIBLE_VARS="";
+declare -g  GUI_STATUS="";
+declare -g  SUDO_PID="";
+
+declare -gr SUDO_CMD="sudo";
+declare -gr RSYNC_EPICS_LOG="/tmp/rsync-epics.log";
+declare -gr RSYNC_STARTUP_LOG="/tmp/rsync-startup.log";
+declare -gr ANSIBLE_LOG="/var/log/ansible.log";
+
+
+function sudo_start() {
+
+    ${SUDO_CMD} -v;
+    
+    ( while [ true ]; do
+	  ${SUDO_CMD} -n /bin/true;
+	  sleep 60;
+	  kill -0 "$$" || exit;
+      done 2>/dev/null
+    ) &
     
 }
 
-#
-# Main starts here
-#
-echo "Usage $0: [DEVENV_EEE]"
-echo " DEVENV_EEE  mounted|local|absent"
 
-#DEVENV_SSSD: true/false
-#DEVENV_EEE: mounted/local/absent
-#DEVENV_CSS: true/false
-#DEVENV_OPENXAL: true/false
-#DEVENV_IPYTHON: true/false
 
-# Let user decide what DEVENV_EEE option is used
-DEVENV_EEE="mounted"
-if [ -n "$1" ]; then
-    DEVENV_EEE="$1"
-fi
+# What should we do?
+DO="$1"
 
-echo
-echo "DEVENV_SSSD: false"
-echo "DEVENV_EEE: ${DEVENV_EEE}" 
-echo "DEVENV_CSS: true"
-echo "DEVENV_OPENXAL: false"
-echo "DEVENV_IPYTHON: false"
-echo
-echo "Continue?"
-read ans
-if [ "${ans}" != "y" -a "${ans}" != "Y" ]; then
-    exit 1
-fi
+case "$DO" in
 
-#
-# Specific only for this script : Global vairables - readonly
-#
-declare -gr SUDO_CMD="sudo"
-declare -gr ANSIBLE_VARS="DEVENV_SSSD=false DEVENV_EEE=${DEVENV_EEE} DEVENV_CSS=true DEVENV_OPENXAL=false DEVENV_IPYTHON=false"
-declare -gr RSYNC_EPICS_LOG="/tmp/rsync-epics.log"
-declare -gr RSYNC_STARTUP_LOG="/tmp/rsync-startup.log"
-declare -gr ANSIBLE_LOG="/var/log/ansible.log"
-declare -g  GUI_STATUS=""
+    nfs)
+	printf "EEE Setup NFS mounted : %s\n" "$DO";
+	DEVENV_EEE="mounted";
+	;;
+    loc)
+	printf "EEE Setup Local disk : %s\n" "$DO";
+	DEVENV_EEE="local";
+	;;
+    no)
+	printf "No EEE setup : %s\n" "$DO";
+	DEVENV_EEE="absent";
+	;;
+    *)
+	echo "">&2
+        echo "usage: $0 <EEE options>" >&2
+        echo >&2
+        echo "  EEE options: " >&2
+	echo ""
+        echo "          nfs : Setup EEE as NFS mounted">&2
+        echo ""
+	echo "          loc : Setup EEE on the local disk through rsync">&2
+	echo ""
+	echo "          no  : No Setup EEE">&2
+        echo ""
+        echo >&2
+	exit 0
+        ;;
+esac
 
-${SUDO_CMD} -v
+ANSIBLE_VARS="DEVENV_SSSD=false DEVENV_EEE=${DEVENV_EEE} DEVENV_CSS=false DEVENV_OPENXAL=false DEVENV_IPYTHON=false";
 
-#
-# This "keep sudo" functionality
-# doesn't work in the no-gui environment (minimal iso and minimal selection)
-# One needs to type ones password twice during the entire setup procedure
-#
+printf "%s\n" "${ANSIBLE_VARS}";
+read -p "Do you want to continue (y/n)? " answer
+case ${answer:0:1} in
+    y|Y )
+	printf "Yes, the script is going to ask to you the password ...... \n";
+    ;;
+    * )
+        printf "Stop here.\n";
+	exit;
+    ;;
+esac
 
-while [ true ];
-do
-    ${SUDO_CMD} -n /bin/true;
-    sleep 60;
-    kill -0 "$$" || exit;
-done 2>/dev/null &
 
-declare -i tag_cnt=$1;
-
+sudo_start;
 
 preparation
 
-#
-#
-SC_GIT_SRC_NAME="ics-ans-devenv"
-SC_GIT_SRC_URL="https://bitbucket.org/europeanspallationsource"
-SC_GIT_SRC_DIR=${SC_TOP}/${SC_GIT_SRC_NAME}
+
+devenv_version="2.2.6-rc1"
+git_src_name="ics-ans-devenv";
+git_src_url="https://bitbucket.org/europeanspallationsource";
+git_src_dir=${SC_TOP}/${git_src_name};
+    
 
 #
 #
-git_clone
+git_clone "${git_src_dir}" "${git_src_url}" "${git_src_name}" "${devenv_version}" ; 
 #
-#
-declare -i tag_cnt=$1;
 
-pushd ${SC_GIT_SRC_DIR}
+pushd ${git_src_dir}
 #
 #
-git_selection  ${tag_cnt};
+# git_selection
+
 if [ "${DEVENV_EEE}" = "local" ]; then
-    update_eeelocal_parameters
+    update_eeelocal_parameters "${git_src_dir}"
 fi
+
 is-active-ui
 
-ini_func "Ansible Playbook"
+__ini_func "Ansible Playbook"
 ${SUDO_CMD} ansible-playbook -i "localhost," -c local devenv.yml --extra-vars="${ANSIBLE_VARS}"
-end_func "Ansible Playbook"
+__end_func "Ansible Playbook"
 #
 
 popd
 
+#
+# Copy the diirt configuration from /opt/cs-studio/configuation/diirt  to $HOME/configuration/diirt
+#
+#update_css_configuration
 
-# #
-# #
-# #yum_gui
+# 
+# 
+# yum_gui
 yum_extra
 #
 
 if [[ ${GUI_STATUS} = "inactive" ]]; then
-    printf "\n>>>>>>>> NO USER INTERFACE  <<<<<<<< \n* One should wait for rsync EPICS processe \n  in order to check the ESS EPICS Environment.\n  tail -n 10 -f ${RSYNC_EPICS_LOG}\n\n";
+    
+    printf "\n>>>>>>>> NO USER INTERFACE  <<<<<<<< \n";
+    if [[ "${DEVENV_EEE}" = "local" ]];  then
+	printf "* One should wait for rsync EPICS processe \n  in order to check the ESS EPICS Environment.\n  tail -n 10 -f ${RSYNC_EPICS_LOG}\n\n";
+    fi
     printf "* One can check the ansible log ${ANSIBLE_LOG}\n  whether the ansible returns OK or not. \n  tail -f ${ANSIBLE_LOG}\n\n";
 fi
 
+${SUDO_CMD} -k;
+
+# Remove some directories in ${HOME}
+printf "Remove Music, Pictures, Public, Templates, and Videos directories in ${HOME}.... \n";
+rm -rf ${HOME}/{Music,Pictures,Public,Templates,Videos}; 
 
 exit
 
